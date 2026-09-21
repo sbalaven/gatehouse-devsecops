@@ -40,7 +40,7 @@ jobs:
           docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:1.177.0
           semgrep scan --config .semgrep.yml --config p/python --error --strict
           --metrics off --json --output reports/semgrep.json app run.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: sast-report
@@ -60,7 +60,7 @@ jobs:
           docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/gitleaks/gitleaks:v8.30.1
           git --log-opts="--all" --redact --report-format json
           --report-path /repo/reports/gitleaks.json /repo
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: secret-report
@@ -79,7 +79,7 @@ jobs:
           docker run --rm -v "$PWD:/repo" aquasec/trivy:0.74.0
           fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1
           --format json --output /repo/reports/dependencies.json /repo/requirements.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: dependency-report
@@ -121,7 +121,7 @@ jobs:
             -t http://127.0.0.1:8080/login -c rules.tsv -I -r zap.html -J zap.json
       - name: Export the scanned candidate
         run: docker save gatehouse:candidate -o candidate.tar
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: scanned-candidate
           path: candidate.tar
@@ -129,7 +129,7 @@ jobs:
       - name: Stop target
         if: always()
         run: docker rm -f gatehouse-ci 2>/dev/null || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: container-and-dast-reports
@@ -159,7 +159,7 @@ jobs:
           name: scanned-candidate
       - name: Record image checksum
         run: sha256sum candidate.tar > SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: gatehouse-release-${{ github.sha }}
           path: |
