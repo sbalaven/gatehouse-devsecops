@@ -1,0 +1,168 @@
+name: Security pipeline
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+
+  sast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: mkdir -p reports
+      - name: Semgrep code checks
+        run: >-
+          docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:1.177.0
+          semgrep scan --config .semgrep.yml --config p/python --error --strict
+          --metrics off --json --output reports/semgrep.json app run.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sast-report
+          path: reports/
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: mkdir -p reports
+      - name: Gitleaks full history scan
+        run: >-
+          docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/gitleaks/gitleaks:v8.30.1
+          git --log-opts="--all" --redact --report-format json
+          --report-path /repo/reports/gitleaks.json /repo
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: secret-report
+          path: reports/
+
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: mkdir -p reports
+      - name: Trivy dependency gate
+        run: >-
+          docker run --rm -v "$PWD:/repo" aquasec/trivy:0.74.0
+          fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1
+          --format json --output /repo/reports/dependencies.json /repo/requirements.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-report
+          path: reports/
+
+  container-and-dast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: mkdir -p reports && chmod 777 reports
+      - name: Build candidate
+        run: docker build -t gatehouse:candidate .
+      - name: Scan candidate image
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          -v "$PWD/reports:/reports" aquasec/trivy:0.74.0
+          image --scanners vuln --severity HIGH,CRITICAL --exit-code 1
+          --format json --output /reports/container.json gatehouse:candidate
+      - name: Start isolated local target
+        run: |
+          export SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(48))')"
+          docker run -d --name gatehouse-ci -p 127.0.0.1:8080:8080 \
+            --cap-drop ALL --security-opt no-new-privileges --read-only \
+            --tmpfs /data:uid=10001,gid=10001 --tmpfs /tmp -e SECRET_KEY gatehouse:candidate
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8080/healthz; then exit 0; fi
+            sleep 2
+          done
+          docker logs gatehouse-ci
+          exit 1
+      - name: ZAP passive baseline and selected blocking rules
+        run: |
+          cp .zap/rules.tsv reports/rules.tsv
+          docker run --rm --network host -v "$PWD/reports:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t http://127.0.0.1:8080/login -c rules.tsv -I -r zap.html -J zap.json
+      - name: Export the scanned candidate
+        run: docker save gatehouse:candidate -o candidate.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scanned-candidate
+          path: candidate.tar
+          retention-days: 1
+      - name: Stop target
+        if: always()
+        run: docker rm -f gatehouse-ci 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: container-and-dast-reports
+          path: reports/
+
+  release-gate:
+    # 'always' makes missing, failed, or cancelled prerequisites explicitly fail.
+    if: always()
+    needs: [tests, sast, secrets, dependencies, container-and-dast]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require every prerequisite to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          jobs = json.loads(os.environ['RESULTS'])
+          failed = [name for name, job in jobs.items() if job['result'] != 'success']
+          if failed:
+              raise SystemExit('Release blocked: ' + ', '.join(failed))
+          print('All release prerequisites passed.')
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: scanned-candidate
+      - name: Record image checksum
+        run: sha256sum candidate.tar > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gatehouse-release-${{ github.sha }}
+          path: |
+            candidate.tar
+            SHA256SUMS.txt
+          retention-days: 7
