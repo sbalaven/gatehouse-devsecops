@@ -91,19 +91,16 @@ docker compose down
 
 The service binds to loopback on port 8080. A named volume preserves data after `down`. It runs as UID 10001, with a read-only root filesystem, dropped Linux capabilities, and `no-new-privileges`. The `/data` volume is writable. Do not run `down -v` unless you intend to erase the database.
 
-## Put it on GitHub
-
-Create an **empty** GitHub repository called `gatehouse-devsecops`. Include hidden files when uploading; `.github/workflows/security.yml` is essential. Using Git from this folder:
+## Clone and contribute
 
 ```bash
-git init -b main
-git add .
-git commit -m "Build Gatehouse app and security delivery pipeline"
-git remote add origin https://github.com/YOUR_USERNAME/gatehouse-devsecops.git
-git push -u origin main
+git clone https://github.com/sbalaven/gatehouse-devsecops.git
+cd gatehouse-devsecops
 ```
 
-Replace `YOUR_USERNAME`. No GitHub token is required inside the app or workflow. Keep your local database, environment files, passwords, and resume out of the repository. The project includes none of your resume's personal contact information.
+Then follow either quick start above. For a change, create a branch, run the tests, and open a pull request with a short explanation and validation results.
+
+[View the security workflow](https://github.com/sbalaven/gatehouse-devsecops/actions/workflows/security.yml) for live results and downloadable reports. No GitHub token is required inside the app or workflow. Local databases, environment files, and passwords are excluded from Git.
 
 After the first workflow run, configure a branch ruleset requiring the **release-gate** status check for `main`. Workflow failures block the release artifact automatically; blocking merges additionally requires that repository setting. Do not add a passing badge until a run has actually passed.
 
