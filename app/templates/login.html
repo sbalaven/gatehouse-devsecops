@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="login-layout">
+  <div><p class="eyebrow">01 / APPLICATION SECURITY</p><h1>Small app.<br>Serious gates.</h1><p class="lede">A focused workspace for tracking security findings, backed by a pipeline you can inspect.</p><div class="stack"><span>Python + Flask</span><span>SQLite</span><span>GitHub Actions</span></div><div class="explain"><p class="eyebrow">THE DELIVERY PATH</p><p>Commit → Test → Scan → Package</p><small>Pipeline results live in GitHub Actions. This page does not report scan status.</small></div></div>
+  <section class="panel login-panel"><p class="eyebrow">YOUR WORKSPACE</p><h2>Welcome back.</h2><p class="muted">Sign in to triage your findings.</p>{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}<form method="post" action="{{ url_for('login') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label for="username">Username</label><input id="username" name="username" autocomplete="username" minlength="3" maxlength="32" required><label for="password">Password</label><input type="password" id="password" name="password" autocomplete="current-password" maxlength="128" required><button class="primary" type="submit">Enter workspace <span>→</span></button></form><p class="small muted">First time here? Create an account using the README quick start.</p></section>
+</section>
+{% endblock %}
