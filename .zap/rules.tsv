@@ -1,0 +1,5 @@
+# Rule ID, policy, explanation (tab-separated)
+10020	FAIL	Anti-clickjacking header missing
+10021	FAIL	X-Content-Type-Options missing
+10038	FAIL	Content Security Policy header missing
+10202	FAIL	Anti-CSRF token missing
