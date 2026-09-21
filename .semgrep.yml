@@ -1,0 +1,16 @@
+rules:
+  - id: no-eval
+    languages: [python]
+    severity: ERROR
+    message: Do not evaluate untrusted expressions.
+    pattern: eval(...)
+  - id: no-debug-server
+    languages: [python]
+    severity: ERROR
+    message: Never ship the interactive debug server.
+    pattern: $APP.run(..., debug=True, ...)
+  - id: no-formatted-sql
+    languages: [python]
+    severity: ERROR
+    message: Use bound SQL parameters instead of formatted strings.
+    pattern: $DB.execute(f"...", ...)
